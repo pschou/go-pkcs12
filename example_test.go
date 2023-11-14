@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log"
 
-	"software.sslmate.com/src/go-pkcs12"
+	"github.com/pschou/go-pkcs12"
 )
 
 func Example_Custom() {

@@ -36,7 +36,7 @@
 //     }
 //   }
 //
-package pkcs12 // import "software.sslmate.com/src/go-pkcs12"
+package pkcs12 // import "github.com/pschou/go-pkcs12"
 
 import (
 	"crypto/ecdsa"

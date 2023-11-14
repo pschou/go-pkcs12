@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"software.sslmate.com/src/go-pkcs12"
+	"github.com/pschou/go-pkcs12"
 )
 
 func Test_additionalOIDs(t *testing.T) {
