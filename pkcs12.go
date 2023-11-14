@@ -275,6 +275,7 @@ func DecodeAttribute(attribute *pkcs12Attribute) (key, value string, err error) 
 	return key, value, nil
 }
 
+/* DEPRECATED
 // Decode extracts a certificate and private key from pfxData, which must be a DER-encoded PKCS#12 file. This function
 // assumes that there is only one certificate and only one private key in the
 // pfxData.  Since PKCS#12 files often contain more than one certificate, you
@@ -320,6 +321,7 @@ func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certi
 	}
 	return p12.KeyEntries[0].Key, p12.CertEntries[0].Cert, CACerts, err
 }
+*/
 
 // When doing key level custom encryption, one can provide a call back function
 // to handle individual keys.  If no function is provided the settings
@@ -542,6 +544,7 @@ func (t *TrustStore) SetRandom(r io.Reader) {
 	t.random = r
 }
 
+/* DEPRECATED
 // DecodeTrustStore extracts the certificates from pfxData, which must be a DER-encoded
 // PKCS#12 file containing exclusively certificates with attribute 2.16.840.1.113894.746875.1.1,
 // which is used by Java to designate a trust anchor.
@@ -562,6 +565,7 @@ func DecodeTrustStore(pfxData []byte, password string) (certs []*x509.Certificat
 	}
 	return
 }
+*/
 
 // UnmarshalTrustStore extracts the TrustStoreEntries from pfxData, which must be a DER-encoded
 // PKCS#12 file containing exclusively certificates with attribute 2.16.840.1.113894.746875.1.1,
@@ -830,7 +834,7 @@ func (c *CertEntry) SetFingerPrint() (err error) {
 	}
 	c.Fingerprint = h
 	return nil
-}*/
+}
 
 // Encode produces pfxData containing one private key (privateKey), an
 // end-entity certificate (certificate), and any number of CA certificates
@@ -872,6 +876,7 @@ func Encode(rand io.Reader, privateKey interface{}, certificate *x509.Certificat
 		CertEntries:      entries,
 	})
 }
+*/
 
 // Marshal produces pfxData containing private keys (PrivateKeys),
 // an entity certificates (CertEntries), and any number of CA certificates
@@ -1034,6 +1039,7 @@ func Marshal(p12 *P12) (pfxData []byte, err error) {
 	return
 }
 
+/* DEPRECATED
 // EncodeTrustStore produces pfxData containing any number of CA certificates
 // (certs) to be trusted. The certificates will be marked with a special OID that
 // allow it to be used as a Java TrustStore in Java 1.8 and newer.
@@ -1095,6 +1101,7 @@ func EncodeTrustStoreEntries(rand io.Reader, entries []TrustStoreEntry, password
 		MACAlgorithm:     OidSHA1,
 	})
 }
+*/
 
 // MarshalTrustStore produces pfxData containing any number of CA certificates
 // (entries) to be trusted. The certificates will be marked with a special OID
