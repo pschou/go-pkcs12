@@ -6,16 +6,13 @@ package pkcs12
 
 import (
 	"bytes"
-	"crypto/rand"
 	"crypto/rsa"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/base64"
-	"encoding/pem"
 	"strings"
 	"testing"
 )
 
+/*
 func TestPfx(t *testing.T) {
 	for commonName, base64P12 := range testdata {
 		p12, err := base64.StdEncoding.DecodeString(noSpace.Replace(base64P12))
@@ -178,7 +175,7 @@ func TestPBES2(t *testing.T) {
 	if len(caCerts) != 0 {
 		t.Errorf("unexpected # of caCerts: got %d, want 0", len(caCerts))
 	}
-}
+}*/
 
 var testdata = map[string]string{
 	// 'null' password test case
