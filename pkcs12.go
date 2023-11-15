@@ -170,11 +170,16 @@ func unmarshal(in []byte, out interface{}) error {
 // are encoded as raw RSA or EC private keys rather than PKCS#8 despite being
 // labeled "PRIVATE KEY").  To decode a PKCS#12 file, use [DecodeChain] instead,
 // and use the [encoding/pem] package to convert to PEM if necessary.
-func ToPEM(pfxData []byte, password string) ([]*pem.Block, error) {
-	encodedPassword, err := bmpStringZeroTerminated(password)
+func ToPEM(pfxData []byte, password []rune) ([]*pem.Block, error) {
+	encodedPassword, err := bmpSliceZeroTerminated(password)
 	if err != nil {
 		return nil, ErrIncorrectPassword
 	}
+	defer func() {
+		for i, _ := range encodedPassword {
+			encodedPassword[i] = 0
+		}
+	}()
 
 	bags, encodedPassword, _, _, err := getSafeContents(pfxData, encodedPassword, 2)
 
@@ -332,7 +337,7 @@ type P12 struct {
 	CertEntries                                     []CertEntry
 	KeyEntries                                      []KeyEntry
 	MACAlgorithm, CertBagAlgorithm, KeyBagAlgorithm asn1.ObjectIdentifier
-	Password                                        string
+	Password                                        []rune
 	HasPassword                                     bool
 	random                                          io.Reader
 	CustomKeyEncrypt                                func(*KeyEntry) ([]byte, error)
@@ -392,10 +397,15 @@ func (d KeyEntry) Clone() KeyEntry {
 func Unmarshal(pfxData []byte, p12 *P12) (err error) {
 	var encodedPassword []byte
 	if p12.HasPassword {
-		encodedPassword, err = bmpStringZeroTerminated(p12.Password)
+		encodedPassword, err = bmpSliceZeroTerminated(p12.Password)
 		if err != nil {
 			return err
 		}
+		defer func() {
+			for i, _ := range encodedPassword {
+				encodedPassword[i] = 0
+			}
+		}()
 	}
 
 	bags, encodedPassword, algorithm, macAlgorithm, err := getSafeContents(pfxData, encodedPassword, 2)
@@ -407,7 +417,7 @@ func Unmarshal(pfxData []byte, p12 *P12) (err error) {
 
 	// Update the Password property
 	if encodedPassword == nil {
-		p12.Password = ""
+		p12.Password = nil
 		p12.HasPassword = false
 	}
 
@@ -516,7 +526,7 @@ type TrustStore struct {
 	MACAlgorithm     asn1.ObjectIdentifier
 	CertBagAlgorithm asn1.ObjectIdentifier
 	random           io.Reader
-	Password         string
+	Password         []rune
 	HasPassword      bool
 }
 
@@ -529,7 +539,7 @@ type TrustStoreEntry struct {
 	Attributes   []pkcs12Attribute
 }
 
-func NewTrustStoreWithPassword(password string) *TrustStore {
+func NewTrustStoreWithPassword(password []rune) *TrustStore {
 	return &TrustStore{
 		random:           rand.Reader,
 		CertBagAlgorithm: OidPBEWithSHAAnd40BitRC2CBC,
@@ -573,7 +583,7 @@ func DecodeTrustStore(pfxData []byte, password string) (certs []*x509.Certificat
 func UnmarshalTrustStore(pfxData []byte, ts *TrustStore) (err error) {
 	var encodedPassword []byte
 	if ts.HasPassword {
-		encodedPassword, err = bmpStringZeroTerminated(ts.Password)
+		encodedPassword, err = bmpSliceZeroTerminated(ts.Password)
 		if err != nil {
 			return err
 		}
@@ -588,7 +598,7 @@ func UnmarshalTrustStore(pfxData []byte, ts *TrustStore) (err error) {
 
 	// Update the Password property
 	if encodedPassword == nil || macAlgorithm == nil {
-		ts.Password = ""
+		ts.Password = nil
 		ts.HasPassword = false
 	}
 
@@ -749,7 +759,7 @@ func New() P12 {
 }
 
 // Create a new P12 with defaults and set the password
-func NewWithPassword(password string) P12 {
+func NewWithPassword(password []rune) P12 {
 	return P12{
 		KeyBagAlgorithm:  OidPBEWithSHAAnd3KeyTripleDESCBC,
 		CertBagAlgorithm: OidPBEWithSHAAnd40BitRC2CBC,
@@ -912,7 +922,7 @@ func Encode(rand io.Reader, privateKey interface{}, certificate *x509.Certificat
 func Marshal(p12 *P12) (pfxData []byte, err error) {
 	var encodedPassword []byte
 	if p12.HasPassword {
-		encodedPassword, err = bmpStringZeroTerminated(string(p12.Password))
+		encodedPassword, err = bmpSliceZeroTerminated(p12.Password)
 		if err != nil {
 			return nil, err
 		}
@@ -1125,7 +1135,7 @@ func EncodeTrustStoreEntries(rand io.Reader, entries []TrustStoreEntry, password
 // Example definition of a TrustStore:
 //
 //	ts := &pkcs12.TrustStore{
-//	  Password:         "myPassword",
+//	  Password:         []byte("myPassword"),
 //	  HasPassword:      true,
 //	  CertBagAlgorithm: pkcs12.OidPBEWithSHAAnd40BitRC2CBC,
 //	  MACAlgorithm:     pkcs12.OidSHA1,
@@ -1136,7 +1146,7 @@ func EncodeTrustStoreEntries(rand io.Reader, entries []TrustStoreEntry, password
 func MarshalTrustStore(ts *TrustStore) (pfxData []byte, err error) {
 	var encodedPassword []byte
 	if ts.HasPassword {
-		encodedPassword, err = bmpStringZeroTerminated(ts.Password)
+		encodedPassword, err = bmpSliceZeroTerminated(ts.Password)
 		if err != nil {
 			return nil, err
 		}

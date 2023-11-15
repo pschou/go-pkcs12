@@ -89,11 +89,11 @@ cLXjHUOhDDyqBAhlzWP0LJxhZQICCAA=`
 	}
 
 	// Create a P12 to unmarshal the p12 into
-	p := pkcs12.NewWithPassword("testme")
+	p := pkcs12.NewWithPassword([]rune("testme"))
 
 	p.CustomKeyDecrypt = func(k *pkcs12.KeyEntry, b []byte) (err error) {
 		fmt.Println("decrypting key...")
-		k.Key, _, err = pkcs12.DecodePkcs8ShroudedKeyBagWithPassword(b, "testme")
+		k.Key, _, err = pkcs12.DecodePkcs8ShroudedKeyBagWithPassword(b, []rune("testme"))
 		return
 	}
 	err = pkcs12.Unmarshal(p12, &p)
@@ -109,7 +109,7 @@ cLXjHUOhDDyqBAhlzWP0LJxhZQICCAA=`
 	}
 
 	// Create a P12 to marshal the new p12 into
-	newP12 := pkcs12.NewWithPassword("myniftycert")
+	newP12 := pkcs12.NewWithPassword([]rune("myniftycert"))
 
 	for _, entry := range p.CertEntries {
 		newP12.CertEntries = append(newP12.CertEntries, pkcs12.CertEntry{Cert: entry.Cert})
@@ -122,7 +122,7 @@ cLXjHUOhDDyqBAhlzWP0LJxhZQICCAA=`
 		fmt.Println("encrypting key...")
 		// Encrypting with a key different than the pkcs12
 		b, err = pkcs12.EncodePkcs8ShroudedKeyBagWithPassword(rand.Reader, k.Key,
-			"key1pass", pkcs12.OidPBEWithSHAAnd3KeyTripleDESCBC)
+			[]rune("key1pass"), pkcs12.OidPBEWithSHAAnd3KeyTripleDESCBC)
 		return
 	}
 
@@ -221,7 +221,7 @@ cLXjHUOhDDyqBAhlzWP0LJxhZQICCAA=`
 	}
 
 	// Create a P12 to unmarshal the p12 into
-	p := pkcs12.NewWithPassword("testme")
+	p := pkcs12.NewWithPassword([]rune("testme"))
 
 	err = pkcs12.Unmarshal(p12, &p)
 	if err != nil {
@@ -236,7 +236,7 @@ cLXjHUOhDDyqBAhlzWP0LJxhZQICCAA=`
 	}
 
 	// Create a P12 to marshal the new p12 into
-	newP12 := pkcs12.NewWithPassword("myniftycert")
+	newP12 := pkcs12.NewWithPassword([]rune("myniftycert"))
 
 	for _, entry := range p.CertEntries {
 		newP12.CertEntries = append(newP12.CertEntries, pkcs12.CertEntry{Cert: entry.Cert})

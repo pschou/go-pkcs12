@@ -91,7 +91,7 @@ cLXjHUOhDDyqBAhlzWP0LJxhZQICCAA=`
 	}
 
 	// Create a P12 to unmarshal the p12 into
-	p := pkcs12.NewWithPassword("testme")
+	p := pkcs12.NewWithPassword([]rune("testme"))
 
 	err = pkcs12.Unmarshal(p12, &p)
 	if err != nil {
@@ -99,7 +99,7 @@ cLXjHUOhDDyqBAhlzWP0LJxhZQICCAA=`
 	}
 
 	// Create a P12 to marshal the new p12 into
-	newP12 := pkcs12.NewWithPassword("test")
+	newP12 := pkcs12.NewWithPassword([]rune("test"))
 
 	for _, entry := range p.CertEntries {
 		newP12.CertEntries = append(newP12.CertEntries, pkcs12.CertEntry{Cert: entry.Cert})

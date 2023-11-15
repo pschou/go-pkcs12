@@ -9,19 +9,78 @@ import (
 	"unicode/utf16"
 )
 
+const (
+	maxRune  = '\U0010FFFF' // Maximum valid Unicode code point.
+	surrSelf = 0x10000
+)
+
+// bmpSliceZeroTerminated returns s encoded in UCS-2 with a zero terminator.
+func bmpSliceZeroTerminated(s []rune) (ret []byte, err error) {
+	// References:
+	// https://tools.ietf.org/html/rfc7292#appendix-B.1
+	// The above RFC provides the info that BMPSlices are NULL terminated.
+	for _, r := range s {
+		if !(r < surrSelf || r > maxRune) { // bad character
+			err = errors.New("pkcs12: string contains characters that cannot be encoded in UCS-2")
+			return
+		}
+	}
+
+	ret = make([]byte, 2*len(s)+2, 2*len(s)+4)
+
+	tmp := utf16.Encode(s)
+	for i, r := range tmp {
+		ret[2*i], ret[2*i+1], tmp[i] = byte(r>>8), byte(r&0xff), 0
+	}
+	return
+}
+
+// bmpSlice returns s encoded in UCS-2 with a zero terminator.
+func bmpSlice(s []rune) (ret []byte, err error) {
+	// References:
+	// https://tools.ietf.org/html/rfc7292#appendix-B.1
+	// The above RFC provides the info that BMPSlices are NULL terminated.
+
+	ret = make([]byte, 0, 2*len(s)+2)
+
+	tmp := utf16.Encode(s)
+	for i, r := range tmp {
+		if r == 0xfffd { // bad character
+			err = errors.New("pkcs12: string contains characters that cannot be encoded in UCS-2")
+			break
+		}
+		ret[2*i], ret[2*i+1], tmp[i] = byte(r>>8), byte(r&0xff), 0
+	}
+	if err != nil {
+		// extra work to make sure everything is wiped
+		for i, _ := range tmp {
+			tmp[i] = 0
+		}
+		for i, _ := range ret {
+			ret[i] = 0
+		}
+	}
+	return
+}
+
+/*
 // bmpStringZeroTerminated returns s encoded in UCS-2 with a zero terminator.
 func bmpStringZeroTerminated(s string) ([]byte, error) {
 	// References:
 	// https://tools.ietf.org/html/rfc7292#appendix-B.1
 	// The above RFC provides the info that BMPStrings are NULL terminated.
 
-	ret, err := bmpString(s)
-	if err != nil {
-		return nil, err
+	ret := make([]byte, 0, 2*len(s)+4)
+
+	for _, r := range s {
+		if t, _ := utf16.EncodeRune(r); t != 0xfffd {
+			return nil, errors.New("pkcs12: string contains characters that cannot be encoded in UCS-2")
+		}
+		ret = append(ret, byte(r/256), byte(r%256))
 	}
 
-	return append(ret, 0, 0), nil
-}
+	return ret, nil
+}*/
 
 // bmpString returns s encoded in UCS-2
 func bmpString(s string) ([]byte, error) {

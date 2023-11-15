@@ -9,7 +9,6 @@ import (
 	"crypto/x509"
 	"encoding/asn1"
 	"errors"
-	"fmt"
 	"io"
 )
 
@@ -26,25 +25,22 @@ type certBag struct {
 }
 
 // Function which decodes a keybag, for use in a Custom Key Decoder with a string input (password)
-func DecodePkcs8ShroudedKeyBagWithPassword(asn1Data []byte, password interface{}) (privateKey interface{}, algorithm asn1.ObjectIdentifier, err error) {
+func DecodePkcs8ShroudedKeyBagWithPassword(asn1Data []byte, password []rune) (privateKey interface{}, algorithm asn1.ObjectIdentifier, err error) {
 	var encodedPassword []byte
-	switch val := password.(type) {
-	case string:
-		encodedPassword, err = bmpStringZeroTerminated(val)
-		if err != nil {
-			return
-		}
-	case []byte:
-		encodedPassword = val
-	default:
-		err = fmt.Errorf("pkcs12: unknown password type: %t", val)
+	encodedPassword, err = bmpSliceZeroTerminated(password)
+	if err != nil {
 		return
 	}
+	defer func() {
+		for i, _ := range encodedPassword {
+			encodedPassword[i] = 0
+		}
+	}()
 	return decodePkcs8ShroudedKeyBag(asn1Data, encodedPassword)
 }
 
 // Function which decodes a keybag, for use in a Custom Key Decoder
-func decodePkcs8ShroudedKeyBag(asn1Data, password []byte) (privateKey interface{}, algorithm asn1.ObjectIdentifier, err error) {
+func decodePkcs8ShroudedKeyBag(asn1Data []byte, bmpPassword []byte) (privateKey interface{}, algorithm asn1.ObjectIdentifier, err error) {
 	pkinfo := new(encryptedPrivateKeyInfo)
 	if err = unmarshal(asn1Data, pkinfo); err != nil {
 		err = errors.New("pkcs12: error decoding PKCS#8 shrouded key bag: " + err.Error())
@@ -52,7 +48,7 @@ func decodePkcs8ShroudedKeyBag(asn1Data, password []byte) (privateKey interface{
 	}
 
 	var pkData []byte
-	pkData, err = pbDecrypt(pkinfo, password)
+	pkData, err = pbDecrypt(pkinfo, bmpPassword)
 	if err != nil {
 		err = errors.New("pkcs12: error decrypting PKCS#8 shrouded key bag: " + err.Error())
 		return
@@ -73,20 +69,17 @@ func decodePkcs8ShroudedKeyBag(asn1Data, password []byte) (privateKey interface{
 	return
 }
 
-func EncodePkcs8ShroudedKeyBagWithPassword(rand io.Reader, privateKey, password interface{}, algorithm asn1.ObjectIdentifier) (asn1Data []byte, err error) {
+func EncodePkcs8ShroudedKeyBagWithPassword(rand io.Reader, privateKey interface{}, password []rune, algorithm asn1.ObjectIdentifier) (asn1Data []byte, err error) {
 	var encodedPassword []byte
-	switch val := password.(type) {
-	case string:
-		encodedPassword, err = bmpStringZeroTerminated(val)
-		if err != nil {
-			return
-		}
-	case []byte:
-		encodedPassword = val
-	default:
-		err = fmt.Errorf("pkcs12: unknown password type: %t", val)
+	encodedPassword, err = bmpSliceZeroTerminated(password)
+	if err != nil {
 		return
 	}
+	defer func() {
+		for i, _ := range encodedPassword {
+			encodedPassword[i] = 0
+		}
+	}()
 	return encodePkcs8ShroudedKeyBag(rand, privateKey, encodedPassword, algorithm)
 }
 func encodePkcs8ShroudedKeyBag(rand io.Reader, privateKey interface{}, password []byte, algorithm asn1.ObjectIdentifier) (asn1Data []byte, err error) {
