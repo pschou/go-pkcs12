@@ -13,6 +13,8 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"hash"
+
+	"golang.org/x/crypto/sha3"
 )
 
 type macData struct {
@@ -28,10 +30,19 @@ type digestInfo struct {
 }
 
 var (
-	OidSHA1   = asn1.ObjectIdentifier([]int{1, 3, 14, 3, 2, 26})
-	OidSHA256 = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 1})
-	OidSHA384 = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 2})
-	OidSHA512 = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 3})
+	OidSHA1          = asn1.ObjectIdentifier([]int{1, 3, 14, 3, 2, 26})
+	OidSHA256        = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 1})
+	OidSHA384        = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 2})
+	OidSHA512        = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 3})
+	OidSHA256_224    = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 4})
+	OidSHA512_224    = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 5})
+	OidSHA512_256    = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 6})
+	OidSHA3_224      = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 7})
+	OidSHA3_256      = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 8})
+	OidSHA3_384      = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 9})
+	OidSHA3_512      = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 10})
+	OidSHA3_SHAKE128 = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 11})
+	OidSHA3_SHAKE256 = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 12})
 )
 
 func doMac(macData *macData, message, password []byte) ([]byte, error) {
@@ -40,16 +51,43 @@ func doMac(macData *macData, message, password []byte) ([]byte, error) {
 	switch {
 	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA1):
 		hFn = sha1.New
-		key = pbkdf(sha1Sum, 20, 64, macData.MacSalt, password, macData.Iterations, 3, 20)
+		key = pbkdf(hFn, 20, 64, macData.MacSalt, password, macData.Iterations, 3, 20)
 	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA256):
 		hFn = sha256.New
-		key = pbkdf(sha256Sum, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+		key = pbkdf(hFn, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
 	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA384):
 		hFn = sha512.New384
-		key = pbkdf(sha256Sum, 48, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+		key = pbkdf(hFn, 48, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
 	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA512):
 		hFn = sha512.New
-		key = pbkdf(sha256Sum, 64, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+		key = pbkdf(hFn, 64, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA256_224):
+		hFn = sha256.New224
+		key = pbkdf(hFn, 28, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA512_224):
+		hFn = sha512.New512_224
+		key = pbkdf(hFn, 28, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA512_256):
+		hFn = sha512.New512_256
+		key = pbkdf(hFn, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA3_224):
+		hFn = sha3.New224
+		key = pbkdf(hFn, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA3_256):
+		hFn = sha3.New256
+		key = pbkdf(hFn, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA3_384):
+		hFn = sha3.New384
+		key = pbkdf(hFn, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA3_512):
+		hFn = sha3.New512
+		key = pbkdf(hFn, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA3_SHAKE128):
+		hFn = NewShake128
+		key = pbkdf(hFn, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA3_SHAKE256):
+		hFn = NewShake256
+		key = pbkdf(hFn, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
 	default:
 		return nil, NotImplementedError("unknown digest algorithm: " + macData.Mac.Algorithm.Algorithm.String())
 	}

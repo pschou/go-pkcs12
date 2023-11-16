@@ -6,19 +6,55 @@ package pkcs12
 
 import (
 	"bytes"
-	"crypto/sha1"
 	"crypto/sha256"
+	"hash"
 	"math/big"
+
+	"golang.org/x/crypto/sha3"
 )
 
 var (
 	one = big.NewInt(1)
 )
 
-// sha1Sum returns the SHA-1 hash of in.
-func sha1Sum(in []byte) []byte {
-	sum := sha1.Sum(in)
-	return sum[:]
+func NewShake128() hash.Hash {
+	return &shake128{}
+}
+
+type shake128 struct{}
+
+func (shake128) Write(p []byte) (n int, err error) { return 0, nil }
+func (shake128) Reset()                            {}
+func (shake128) Size() int                         { return 0 }
+func (shake128) BlockSize() int                    { return 0 }
+
+// shake128 does the sha3-shake128
+func (shake128) Sum(in []byte) []byte {
+	h := make([]byte, 16)
+	d := sha3.NewShake128()
+	d.Write(in)
+	d.Read(h)
+	return h
+}
+
+func NewShake256() hash.Hash {
+	return &shake256{}
+}
+
+type shake256 struct{}
+
+func (shake256) Write(p []byte) (n int, err error) { return 0, nil }
+func (shake256) Reset()                            {}
+func (shake256) Size() int                         { return 0 }
+func (shake256) BlockSize() int                    { return 0 }
+
+// shake256 does the sha3-shake256
+func (shake256) Sum(in []byte) []byte {
+	h := make([]byte, 16)
+	d := sha3.NewShake256()
+	d.Write(in)
+	d.Read(h)
+	return h
 }
 
 // sha256Sum returns the SHA-256 hash of in.
@@ -37,7 +73,7 @@ func fillWithRepeats(pattern []byte, v int) []byte {
 	return bytes.Repeat(pattern, (outputLen+len(pattern)-1)/len(pattern))[:outputLen]
 }
 
-func pbkdf(hash func([]byte) []byte, u, v int, salt, password []byte, r int, ID byte, size int) (key []byte) {
+func pbkdf(hashFn func() hash.Hash, u, v int, salt, password []byte, r int, ID byte, size int) (key []byte) {
 	// implementation of https://tools.ietf.org/html/rfc7292#appendix-B.2 , RFC text verbatim in comments
 
 	//    Let H be a hash function built around a compression function f:
@@ -114,9 +150,13 @@ func pbkdf(hash func([]byte) []byte, u, v int, salt, password []byte, r int, ID 
 	for i := 0; i < c; i++ {
 		//        A.  Set A2=H^r(D||I). (i.e., the r-th hash of D||1,
 		//            H(H(H(... H(D||I))))
-		Ai := hash(append(D, I...))
+		hash := hashFn()
+		hash.Write(append(D, I...))
+		Ai := hash.Sum(nil)
 		for j := 1; j < r; j++ {
-			Ai = hash(Ai)
+			hash = hashFn()
+			hash.Write(Ai)
+			Ai = hash.Sum(nil)
 		}
 		copy(A[i*u:], Ai[:])
 

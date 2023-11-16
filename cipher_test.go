@@ -122,16 +122,22 @@ cLXjHUOhDDyqBAhlzWP0LJxhZQICCAA=`
 	oids := []asn1.ObjectIdentifier{
 		pkcs12.OidPBEWithSHAAnd128BitRC4,
 		pkcs12.OidPBEWithSHAAnd40BitRC4,
+		pkcs12.OidPBEWithSHAAnd3KeyTripleDESCBC,
 		pkcs12.OidPBEWithSHAAnd2KeyTripleDESCBC,
 		pkcs12.OidPBEWithSHAAnd128BitRC2CBC,
+		pkcs12.OidPBEWithSHAAnd40BitRC2CBC,
 		pkcs12.OidPBES2,
+		//pkcs12.OidPBKDF2,
 	}
 	names := []string{
 		"test-128-rc4-cbc",
 		"test-40-rc4-cbc",
+		"test-3key-3des-cbc",
 		"test-2key-3des-cbc",
 		"test-128-rc2-cbc",
+		"test-40-rc2-cbc",
 		"test-pbes2",
+		//"test-pbkdf2",
 	}
 	for i, oid := range oids {
 		fmt.Println("Writing file " + names[i] + ".p12 for verification")
