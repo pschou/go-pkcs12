@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package pkcs12
+package pkcs12_test
 
 import (
 	"bytes"
@@ -10,31 +10,40 @@ import (
 	"encoding/base64"
 	"strings"
 	"testing"
+
+	"github.com/pschou/go-pkcs12"
 )
 
-/*
 func TestPfx(t *testing.T) {
 	for commonName, base64P12 := range testdata {
-		p12, err := base64.StdEncoding.DecodeString(noSpace.Replace(base64P12))
+		p12Data, err := base64.StdEncoding.DecodeString(noSpace.Replace(base64P12))
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		priv, cert, err := Decode(p12, "")
+		p12 := pkcs12.P12{Password: []rune("")}
+		err = pkcs12.Unmarshal(p12Data, &p12)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("on cert %s: %v", commonName, err)
 		}
 
-		if err := priv.(*rsa.PrivateKey).Validate(); err != nil {
+		if len(p12.KeyEntries) != 1 {
+			t.Errorf("unexpected # of Keys: got %d, want 1", len(p12.CertEntries))
+		}
+		if err := p12.KeyEntries[0].Key.(*rsa.PrivateKey).Validate(); err != nil {
 			t.Errorf("error while validating private key: %v", err)
 		}
 
-		if cert.Subject.CommonName != commonName {
-			t.Errorf("expected common name to be %q, but found %q", commonName, cert.Subject.CommonName)
+		if len(p12.CertEntries) != 1 {
+			t.Errorf("unexpected # of Certs: got %d, want 1", len(p12.CertEntries))
+		}
+		if p12.CertEntries[0].Cert.Subject.CommonName != commonName {
+			t.Errorf("expected common name to be %q, but found %q", commonName, p12.CertEntries[0].Cert.Subject.CommonName)
 		}
 	}
 }
 
+/*
 func TestPEM(t *testing.T) {
 	for commonName, base64P12 := range testdata {
 		p12, err := base64.StdEncoding.DecodeString(noSpace.Replace(base64P12))
@@ -42,7 +51,7 @@ func TestPEM(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		blocks, err := ToPEM(p12, "")
+		blocks, err := pkcs12.ToPEM(p12, []rune(""))
 		if err != nil {
 			t.Fatalf("error while converting to PEM: %s", err)
 		}
@@ -66,35 +75,42 @@ func TestPEM(t *testing.T) {
 		}
 	}
 }
+*/
 
 func TestTrustStore(t *testing.T) {
 	for commonName, base64P12 := range testdata {
-		p12, err := base64.StdEncoding.DecodeString(noSpace.Replace(base64P12))
+		p12Data, err := base64.StdEncoding.DecodeString(noSpace.Replace(base64P12))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		p12 := pkcs12.P12{Password: []rune("")}
+		err = pkcs12.Unmarshal(p12Data, &p12)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		ts := pkcs12.NewTrustStoreWithPassword([]rune("password"))
+		ts.Entries = append(ts.Entries, pkcs12.TrustStoreEntry{
+			Cert: p12.CertEntries[0].Cert,
+		})
+		pfxData, err := pkcs12.MarshalTrustStore(ts)
 		if err != nil {
 			t.Fatalf("%s: %s", commonName, err)
 		}
 
-		_, cert, err := Decode(p12, "")
+		ts_decode := &pkcs12.TrustStore{Password: []rune("password")}
+		err = pkcs12.UnmarshalTrustStore(pfxData, ts_decode)
 		if err != nil {
 			t.Fatalf("%s: %s", commonName, err)
 		}
 
-		pfxData, err := EncodeTrustStore(rand.Reader, []*x509.Certificate{cert}, "password")
-		if err != nil {
-			t.Fatalf("%s: %s", commonName, err)
-		}
-
-		decodedCerts, err := DecodeTrustStore(pfxData, "password")
-		if err != nil {
-			t.Fatalf("%s: %s", commonName, err)
-		}
-
-		if len(decodedCerts) != 1 {
+		if len(ts_decode.Entries) != 1 {
 			t.Fatalf("%s: Unexpected number of certs", commonName)
 		}
 
-		if decodedCerts[0].Subject.CommonName != commonName {
-			t.Errorf("expected common name to be %q, but found %q", commonName, decodedCerts[0].Subject.CommonName)
+		if ts_decode.Entries[0].Cert.Subject.CommonName != commonName {
+			t.Errorf("expected common name to be %q, but found %q", commonName, ts_decode.Entries[0].Cert.Subject.CommonName)
 		}
 	}
 }
@@ -153,29 +169,35 @@ func TestPBES2(t *testing.T) {
 		cTf8MehzJRSgkl5lmdW8+wJmOPmoRznUe5lvKT6x7op6OqiBjVKcl0QLMhvkJBY4TczbrRRA97G9
 		6BHN4DBJpg4kCM/votw4eHQPrhPVce0wSzAvMAsGCWCGSAFlAwQCAQQgj1Iu53yHiWVEMsvWiRSz
 		VpPEeNzjeXXdrfuUMhBDWAQEFLYa3qh/1OH1CugDTUZD8yt4lOIFAgIH0A==`
-	p12, err := base64.StdEncoding.DecodeString(noSpace.Replace(base64P12))
-	if err != nil {
-		t.Fatal(err)
-	}
-	pk, cert, caCerts, err := DecodeChain(p12, "password")
+	p12Data, err := base64.StdEncoding.DecodeString(noSpace.Replace(base64P12))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	rsaPk, ok := pk.(*rsa.PrivateKey)
+	p12 := &pkcs12.P12{Password: []rune("password")}
+	err = pkcs12.Unmarshal(p12Data, p12)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(p12.KeyEntries) != 1 {
+		t.Errorf("unexpected # of Keys: got %d, want 1", len(p12.CertEntries))
+	}
+	rsaPk, ok := p12.KeyEntries[0].Key.(*rsa.PrivateKey)
 	if !ok {
 		t.Error("could not cast to rsa private key")
 	}
+	if len(p12.CertEntries) != 1 {
+		t.Errorf("unexpected # of Certs: got %d, want 1", len(p12.CertEntries))
+	}
+	cert := p12.CertEntries[0].Cert
 	if !rsaPk.PublicKey.Equal(cert.PublicKey) {
 		t.Error("public key embedded in private key not equal to public key of certificate")
 	}
 	if cert.Subject.CommonName != commonName {
 		t.Errorf("unexpected leaf cert common name, got %s, want %s", cert.Subject.CommonName, commonName)
 	}
-	if len(caCerts) != 0 {
-		t.Errorf("unexpected # of caCerts: got %d, want 0", len(caCerts))
-	}
-}*/
+}
 
 var testdata = map[string]string{
 	// 'null' password test case
@@ -284,9 +306,9 @@ func TestDecodeAES256(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		p := NewWithPassword([]rune("testme"))
+		p := pkcs12.NewWithPassword([]rune("testme"))
 
-		err = Unmarshal(p12, &p)
+		err = pkcs12.Unmarshal(p12, &p)
 		if err != nil {
 			t.Fatal(err)
 		}

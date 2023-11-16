@@ -28,13 +28,13 @@ func TestPbDecrypterFor(t *testing.T) {
 
 	pass, _ := bmpSliceZeroTerminated([]rune("Sesame open"))
 
-	_, _, err := pbDecrypterFor(alg, pass)
+	_, _, _, err := pbDecrypterFor(alg, pass)
 	if _, ok := err.(NotImplementedError); !ok {
 		t.Errorf("expected not implemented error, got: %T %s", err, err)
 	}
 
 	alg.Algorithm = sha1WithTripleDES
-	cbc, blockSize, err := pbDecrypterFor(alg, pass)
+	cbc, blockSize, _, err := pbDecrypterFor(alg, pass)
 	if err != nil {
 		t.Errorf("unexpected error from pbDecrypterFor %v", err)
 	}
@@ -127,7 +127,7 @@ func TestPbDecrypt(t *testing.T) {
 		}
 		password, _ := bmpSliceZeroTerminated([]rune("sesame"))
 
-		plaintext, err := pbDecrypt(decryptable, password)
+		plaintext, _, err := pbDecrypt(decryptable, password)
 		if err != test.expectedError {
 			t.Errorf("#%d: got error %q, but wanted %q", i, err, test.expectedError)
 			continue

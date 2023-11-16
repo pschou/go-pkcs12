@@ -4,7 +4,6 @@ import (
 	"encoding/asn1"
 	"encoding/base64"
 	"fmt"
-	"log"
 	"os"
 	"testing"
 
@@ -87,7 +86,7 @@ FDEaHhgAZgByAGkAZQBuAGQAbAB5AE4AYQBtAGUwMTAhMAkGBSsOAwIaBQAEFJ9czzs2Hmikr4DN
 cLXjHUOhDDyqBAhlzWP0LJxhZQICCAA=`
 	p12, err := base64.StdEncoding.DecodeString(rawP12)
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
 	// Create a P12 to unmarshal the p12 into
@@ -95,8 +94,9 @@ cLXjHUOhDDyqBAhlzWP0LJxhZQICCAA=`
 
 	err = pkcs12.Unmarshal(p12, &p)
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal("Error decoding with password", err)
 	}
+	//fmt.Printf("p: %#v\n", p)
 
 	// Create a P12 to marshal the new p12 into
 	newP12 := pkcs12.NewWithPassword([]rune("test"))
@@ -124,16 +124,21 @@ cLXjHUOhDDyqBAhlzWP0LJxhZQICCAA=`
 		pkcs12.OidPBEWithSHAAnd40BitRC4,
 		pkcs12.OidPBEWithSHAAnd2KeyTripleDESCBC,
 		pkcs12.OidPBEWithSHAAnd128BitRC2CBC,
+		pkcs12.OidPBES2,
 	}
 	names := []string{
 		"test-128-rc4-cbc",
 		"test-40-rc4-cbc",
 		"test-2key-3des-cbc",
 		"test-128-rc2-cbc",
+		"test-pbes2",
 	}
 	for i, oid := range oids {
 		fmt.Println("Writing file " + names[i] + ".p12 for verification")
-		//newP12.KeyBagAlgorithm = oid
+		_ = oid
+		newP12.EncryptionIterations = 2001
+		newP12.MACIterations = 2002
+		newP12.KeyBagAlgorithm = oid
 		newP12.CertBagAlgorithm = oid
 		var out []byte
 		out, err = pkcs12.Marshal(&newP12)

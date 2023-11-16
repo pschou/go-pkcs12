@@ -15,6 +15,7 @@ import (
 var (
 	// see https://tools.ietf.org/html/rfc7292#appendix-D
 	oidCertTypeX509Certificate = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 9, 22, 1})
+	oidKeyBag                  = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 12, 10, 1, 1})
 	oidPKCS8ShroundedKeyBag    = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 12, 10, 1, 2})
 	oidCertBag                 = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 12, 10, 1, 3})
 )
@@ -25,7 +26,7 @@ type certBag struct {
 }
 
 // Function which decodes a keybag, for use in a Custom Key Decoder with a string input (password)
-func DecodePkcs8ShroudedKeyBagWithPassword(asn1Data []byte, password []rune) (privateKey interface{}, algorithm asn1.ObjectIdentifier, err error) {
+func DecodePkcs8ShroudedKeyBagWithPassword(asn1Data []byte, password []rune) (privateKey interface{}, algorithm asn1.ObjectIdentifier, salt []byte, err error) {
 	var encodedPassword []byte
 	encodedPassword, err = bmpSliceZeroTerminated(password)
 	if err != nil {
@@ -40,7 +41,7 @@ func DecodePkcs8ShroudedKeyBagWithPassword(asn1Data []byte, password []rune) (pr
 }
 
 // Function which decodes a keybag, for use in a Custom Key Decoder
-func decodePkcs8ShroudedKeyBag(asn1Data []byte, bmpPassword []byte) (privateKey interface{}, algorithm asn1.ObjectIdentifier, err error) {
+func decodePkcs8ShroudedKeyBag(asn1Data []byte, bmpPassword []byte) (privateKey interface{}, algorithm asn1.ObjectIdentifier, salt []byte, err error) {
 	pkinfo := new(encryptedPrivateKeyInfo)
 	if err = unmarshal(asn1Data, pkinfo); err != nil {
 		err = errors.New("pkcs12: error decoding PKCS#8 shrouded key bag: " + err.Error())
@@ -48,7 +49,7 @@ func decodePkcs8ShroudedKeyBag(asn1Data []byte, bmpPassword []byte) (privateKey 
 	}
 
 	var pkData []byte
-	pkData, err = pbDecrypt(pkinfo, bmpPassword)
+	pkData, salt, err = pbDecrypt(pkinfo, bmpPassword)
 	if err != nil {
 		err = errors.New("pkcs12: error decrypting PKCS#8 shrouded key bag: " + err.Error())
 		return
@@ -69,7 +70,8 @@ func decodePkcs8ShroudedKeyBag(asn1Data []byte, bmpPassword []byte) (privateKey 
 	return
 }
 
-func EncodePkcs8ShroudedKeyBagWithPassword(rand io.Reader, privateKey interface{}, password []rune, algorithm asn1.ObjectIdentifier) (asn1Data []byte, err error) {
+func EncodePkcs8ShroudedKeyBagWithPassword(rand io.Reader, privateKey interface{}, password []rune,
+	algorithm asn1.ObjectIdentifier, iterations uint, salt []byte) (asn1Data []byte, err error) {
 	var encodedPassword []byte
 	encodedPassword, err = bmpSliceZeroTerminated(password)
 	if err != nil {
@@ -80,21 +82,26 @@ func EncodePkcs8ShroudedKeyBagWithPassword(rand io.Reader, privateKey interface{
 			encodedPassword[i] = 0
 		}
 	}()
-	return encodePkcs8ShroudedKeyBag(rand, privateKey, encodedPassword, algorithm)
+	return encodePkcs8ShroudedKeyBag(rand, privateKey, encodedPassword, algorithm, iterations, salt)
 }
-func encodePkcs8ShroudedKeyBag(rand io.Reader, privateKey interface{}, password []byte, algorithm asn1.ObjectIdentifier) (asn1Data []byte, err error) {
+
+func encodePkcs8ShroudedKeyBag(rand io.Reader, privateKey interface{}, password []byte, algorithm asn1.ObjectIdentifier,
+	iterations uint, randomSalt []byte) (asn1Data []byte, err error) {
+
 	var pkData []byte
 	if pkData, err = x509.MarshalPKCS8PrivateKey(privateKey); err != nil {
 		return nil, errors.New("pkcs12: error encoding PKCS#8 private key: " + err.Error())
 	}
 
-	randomSalt := make([]byte, 8)
-	if _, err = rand.Read(randomSalt); err != nil {
-		return nil, errors.New("pkcs12: error reading random salt: " + err.Error())
-	}
 	var paramBytes []byte
-	if paramBytes, err = asn1.Marshal(pbeParams{Salt: randomSalt, Iterations: 2048}); err != nil {
-		return nil, errors.New("pkcs12: error encoding params: " + err.Error())
+	if algorithm.Equal(OidPBES2) {
+		if paramBytes, err = makePBES2Parameters(rand, randomSalt, int(iterations)); err != nil {
+			return nil, errors.New("pkcs12: error encoding params: " + err.Error())
+		}
+	} else {
+		if paramBytes, err = asn1.Marshal(pbeParams{Salt: randomSalt, Iterations: int(iterations)}); err != nil {
+			return nil, errors.New("pkcs12: error encoding params: " + err.Error())
+		}
 	}
 
 	var pkinfo encryptedPrivateKeyInfo

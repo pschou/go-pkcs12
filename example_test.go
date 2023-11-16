@@ -93,7 +93,7 @@ cLXjHUOhDDyqBAhlzWP0LJxhZQICCAA=`
 
 	p.CustomKeyDecrypt = func(k *pkcs12.KeyEntry, b []byte) (err error) {
 		fmt.Println("decrypting key...")
-		k.Key, _, err = pkcs12.DecodePkcs8ShroudedKeyBagWithPassword(b, []rune("testme"))
+		k.Key, _, _, err = pkcs12.DecodePkcs8ShroudedKeyBagWithPassword(b, []rune("testme"))
 		return
 	}
 	err = pkcs12.Unmarshal(p12, &p)
@@ -102,10 +102,10 @@ cLXjHUOhDDyqBAhlzWP0LJxhZQICCAA=`
 	}
 
 	for _, cert := range p.CertEntries {
-		fmt.Printf("Cert fingerprint: %0x\n", cert.KeyID)
+		fmt.Printf("Cert fingerprint: %02x\n", cert.KeyID)
 	}
 	for _, key := range p.KeyEntries {
-		fmt.Printf("Key fingerprint : %0x\n", key.KeyID)
+		fmt.Printf("Key fingerprint : %02x\n", key.KeyID)
 	}
 
 	// Create a P12 to marshal the new p12 into
@@ -120,9 +120,12 @@ cLXjHUOhDDyqBAhlzWP0LJxhZQICCAA=`
 
 	newP12.CustomKeyEncrypt = func(k *pkcs12.KeyEntry) (b []byte, err error) {
 		fmt.Println("encrypting key...")
+
+		randomSalt := []byte{0, 4, 1, 5, 2, 6, 3, 7}
+
 		// Encrypting with a key different than the pkcs12
 		b, err = pkcs12.EncodePkcs8ShroudedKeyBagWithPassword(rand.Reader, k.Key,
-			[]rune("key1pass"), pkcs12.OidPBEWithSHAAnd3KeyTripleDESCBC)
+			[]rune("key1pass"), pkcs12.OidPBEWithSHAAnd3KeyTripleDESCBC, 1000, randomSalt)
 		return
 	}
 
@@ -132,13 +135,13 @@ cLXjHUOhDDyqBAhlzWP0LJxhZQICCAA=`
 		log.Fatal(err)
 	}
 
-	fmt.Printf("%02x", out[:20])
+	fmt.Printf("%02x\n", out[:20])
 	// Output:
-	//decrypting key...
-	//Cert fingerprint: 041458e9b47ed494a2767e88f1de703ffd12fa27fee7
-	//Key fingerprint : 041458e9b47ed494a2767e88f1de703ffd12fa27fee7
-	//encrypting key...
-	//30820f9002010330820f5c06092a864886f70d01
+	// decrypting key...
+	// Cert fingerprint: 041458e9b47ed494a2767e88f1de703ffd12fa27fee7
+	// Key fingerprint : 041458e9b47ed494a2767e88f1de703ffd12fa27fee7
+	// encrypting key...
+	// 30820f9402010330820f5c06092a864886f70d01
 }
 
 func Example_MarshalAndUnmarshal() {
@@ -255,5 +258,5 @@ cLXjHUOhDDyqBAhlzWP0LJxhZQICCAA=`
 	// Output:
 	// Cert ID: 041458e9b47ed494a2767e88f1de703ffd12fa27fee7
 	// Key ID : 041458e9b47ed494a2767e88f1de703ffd12fa27fee7
-	// 30820f9002010330820f5c06092a864886f70d01
+	// 30820f9402010330820f5c06092a864886f70d01
 }
