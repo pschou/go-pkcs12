@@ -72,19 +72,19 @@ func doMac(macData *macData, message, password []byte) ([]byte, error) {
 		key = pbkdf(hFn, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
 	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA3_224):
 		hFn = sha3.New224
-		key = pbkdf(hFn, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+		key = pbkdf(hFn, 28, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
 	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA3_256):
 		hFn = sha3.New256
 		key = pbkdf(hFn, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
 	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA3_384):
 		hFn = sha3.New384
-		key = pbkdf(hFn, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+		key = pbkdf(hFn, 48, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
 	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA3_512):
 		hFn = sha3.New512
-		key = pbkdf(hFn, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+		key = pbkdf(hFn, 64, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
 	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA3_SHAKE128):
 		hFn = NewShake128
-		key = pbkdf(hFn, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+		key = pbkdf(hFn, 16, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
 	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA3_SHAKE256):
 		hFn = NewShake256
 		key = pbkdf(hFn, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)

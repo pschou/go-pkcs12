@@ -50,7 +50,7 @@ func (shake256) BlockSize() int                    { return 0 }
 
 // shake256 does the sha3-shake256
 func (shake256) Sum(in []byte) []byte {
-	h := make([]byte, 16)
+	h := make([]byte, 32)
 	d := sha3.NewShake256()
 	d.Write(in)
 	d.Read(h)
