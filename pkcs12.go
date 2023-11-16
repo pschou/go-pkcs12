@@ -365,6 +365,9 @@ func (p *P12) WithRand(r io.Reader) {
 
 // Generate salts
 func (p *P12) GenerateSalts(sl int) (err error) {
+	if p.random == nil {
+		p.random = rand.Reader
+	}
 	if sl < 8 {
 		sl = 8
 	}
