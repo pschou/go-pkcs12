@@ -63,16 +63,16 @@ func doMac(macData *macData, message, password []byte) ([]byte, error) {
 		key = pbkdf(hFn, 64, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
 	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA256_224):
 		hFn = sha256.New224
-		key = pbkdf(hFn, 28, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+		key = pbkdf(hFn, 28, 64, macData.MacSalt, password, macData.Iterations, 3, 28)
 	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA512_224):
 		hFn = sha512.New512_224
-		key = pbkdf(hFn, 28, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+		key = pbkdf(hFn, 28, 64, macData.MacSalt, password, macData.Iterations, 3, 28)
 	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA512_256):
 		hFn = sha512.New512_256
 		key = pbkdf(hFn, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
 	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA3_224):
 		hFn = sha3.New224
-		key = pbkdf(hFn, 28, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+		key = pbkdf(hFn, 28, 64, macData.MacSalt, password, macData.Iterations, 3, 28)
 	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA3_256):
 		hFn = sha3.New256
 		key = pbkdf(hFn, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
@@ -84,7 +84,7 @@ func doMac(macData *macData, message, password []byte) ([]byte, error) {
 		key = pbkdf(hFn, 64, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
 	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA3_SHAKE128):
 		hFn = NewShake128
-		key = pbkdf(hFn, 16, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
+		key = pbkdf(hFn, 16, 64, macData.MacSalt, password, macData.Iterations, 3, 16)
 	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA3_SHAKE256):
 		hFn = NewShake256
 		key = pbkdf(hFn, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
