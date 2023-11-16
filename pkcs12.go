@@ -363,6 +363,28 @@ func (p *P12) WithRand(r io.Reader) {
 	p.random = r
 }
 
+// Generate salts
+func (p *P12) GenerateSalts(sl int) (err error) {
+	if sl < 8 {
+		sl = 8
+	}
+	p.safeSalt = make([]byte, sl)
+	if _, err = p.random.Read(p.safeSalt); err != nil {
+		return
+	}
+	p.macSalt = make([]byte, sl)
+	if _, err = p.random.Read(p.macSalt); err != nil {
+		return
+	}
+	for i := range p.KeyEntries {
+		p.KeyEntries[i].salt = make([]byte, sl)
+		if _, err = p.random.Read(p.KeyEntries[i].salt); err != nil {
+			return
+		}
+	}
+	return
+}
+
 func (d CertEntry) Clone() CertEntry {
 	return CertEntry{
 		Cert:         d.Cert,
