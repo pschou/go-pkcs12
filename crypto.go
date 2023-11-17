@@ -10,9 +10,11 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/des"
+	"crypto/md5"
 	"crypto/rc4"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/sha512"
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"errors"
@@ -21,6 +23,7 @@ import (
 
 	"github.com/pschou/go-pkcs12/internal/rc2"
 	"golang.org/x/crypto/pbkdf2"
+	"golang.org/x/crypto/sha3"
 )
 
 var (
@@ -31,12 +34,22 @@ var (
 	OidPBEWithSHAAnd128BitRC2CBC     = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 12, 1, 5})
 	OidPBEWithSHAAnd40BitRC2CBC      = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 12, 1, 6})
 	OidPBES2                         = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 5, 13})
-	OidPBKDF2                        = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 5, 12})
+	oidPBKDF2                        = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 5, 12})
+	OidHmacWithMD5                   = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 6})
 	OidHmacWithSHA1                  = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 7})
+	OidHmacWithSHA256_224            = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 8})
 	OidHmacWithSHA256                = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 9})
+	OidHmacWithSHA512_384            = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 10})
+	OidHmacWithSHA512                = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 11})
+	OidHmacWithSHA512_224            = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 12})
+	OidHmacWithSHA512_256            = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 13})
 	OidAES128CBC                     = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 1, 2})
 	OidAES192CBC                     = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 1, 22})
 	OidAES256CBC                     = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 1, 42})
+	OidHmacWithSHA3_224              = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 13})
+	OidHmacWithSHA3_256              = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 14})
+	OidHmacWithSHA3_384              = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 15})
+	OidHmacWithSHA3_512              = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 16})
 )
 
 // pbeCipher is an abstraction of a PKCS#12 cipher.
@@ -141,7 +154,7 @@ type pbeParams struct {
 	Iterations int
 }
 
-func pbeCipherFor(algorithm pkix.AlgorithmIdentifier, password []byte) (block cipher.Block, iv, salt []byte, err error) {
+func pbeCipherFor(algorithm pkix.AlgorithmIdentifier, password []byte) (block cipher.Block, iv, salt []byte, HMACAlgorithm, EncryptionAlgorithm asn1.ObjectIdentifier, err error) {
 	var cipherType pbeCipher
 
 	switch {
@@ -204,24 +217,28 @@ func pbeCipherFor(algorithm pkix.AlgorithmIdentifier, password []byte) (block ci
 	return
 }
 
-func pbDecrypterFor(algorithm pkix.AlgorithmIdentifier, password []byte) (blockMode cipher.BlockMode, blockSize int, salt []byte, err error) {
+func pbDecrypterFor(algorithm pkix.AlgorithmIdentifier, password []byte) (blockMode cipher.BlockMode, blockSize int,
+	salt []byte, HMACAlgorithm, EncryptionAlgorithm asn1.ObjectIdentifier, err error) {
 	var iv []byte
 	var block cipher.Block
-	block, iv, salt, err = pbeCipherFor(algorithm, password)
+	block, iv, salt, HMACAlgorithm, EncryptionAlgorithm, err = pbeCipherFor(algorithm, password)
 	if err != nil {
 		return
 	}
 
 	if len(iv) == 1 {
-		if bm, ok := block.(cipher.BlockMode); ok {
-			return bm, 1, nil, nil
+		var ok bool
+		if blockMode, ok = block.(cipher.BlockMode); ok {
+			blockSize = 1
+			return
 		}
 		err = errors.New("pkcs12: unexpected cipher block")
 		return
 	}
 
 	if block == nil {
-		return noCipher{}, 1, nil, nil
+		blockMode, blockSize = noCipher{}, 1
+		return
 	}
 
 	blockMode = cipher.NewCBCDecrypter(block, iv)
@@ -230,36 +247,46 @@ func pbDecrypterFor(algorithm pkix.AlgorithmIdentifier, password []byte) (blockM
 	return
 }
 
-func pbDecrypt(info decryptable, password []byte) (decrypted []byte, salt []byte, err error) {
-	cbc, blockSize, saltVal, err := pbDecrypterFor(info.Algorithm(), password)
+func ContainerDecrypt(info Decryptable, password []byte) (decrypted []byte, salt []byte, HMACAlgorithm, EncryptionAlgorithm asn1.ObjectIdentifier, err error) {
+	return pbDecrypt(info, password)
+}
+
+func pbDecrypt(info Decryptable, password []byte) (decrypted []byte, salt []byte, HMACAlgorithm, EncryptionAlgorithm asn1.ObjectIdentifier, err error) {
+	var cbc cipher.BlockMode
+	var blockSize int
+	cbc, blockSize, salt, HMACAlgorithm, EncryptionAlgorithm, err = pbDecrypterFor(info.Algorithm(), password)
 	if err != nil {
-		return nil, nil, err
+		return
 	}
 
 	encrypted := info.Data()
 	if len(encrypted) == 0 {
-		return nil, nil, errors.New("pkcs12: empty encrypted data")
+		err = errors.New("pkcs12: empty encrypted data")
+		return
 	}
 	if len(encrypted)%blockSize != 0 {
-		return nil, nil, errors.New("pkcs12: input is not a multiple of the block size")
+		err = errors.New("pkcs12: input is not a multiple of the block size")
+		return
 	}
 	decrypted = make([]byte, len(encrypted))
-	salt = saltVal
 	cbc.CryptBlocks(decrypted, encrypted)
 
 	psLen := int(decrypted[len(decrypted)-1])
 	if psLen == 0 || psLen > blockSize {
-		return nil, nil, ErrDecryption
+		decrypted, err = nil, ErrDecryption
+		return
 	}
 
 	if len(decrypted) < psLen {
-		return nil, nil, ErrDecryption
+		decrypted, err = nil, ErrDecryption
+		return
 	}
 
 	ps := decrypted[len(decrypted)-psLen:]
 	decrypted = decrypted[:len(decrypted)-psLen]
 	if bytes.Compare(ps, bytes.Repeat([]byte{byte(psLen)}, psLen)) != 0 {
-		return nil, nil, ErrDecryption
+		decrypted, err = nil, ErrDecryption
+		return
 	}
 
 	return
@@ -291,13 +318,14 @@ type pbkdf2Params struct {
 	Prf        pkix.AlgorithmIdentifier `asn1:"optional"`
 }
 
-func pbes2CipherFor(algorithm pkix.AlgorithmIdentifier, password []byte) (block cipher.Block, iv []byte, salt []byte, err error) {
+func pbes2CipherFor(algorithm pkix.AlgorithmIdentifier, password []byte) (block cipher.Block, iv []byte,
+	salt []byte, HMACAlgorithm, EncryptionAlgorithm asn1.ObjectIdentifier, err error) {
 	var params pbes2Params
 	if err = unmarshal(algorithm.Parameters.FullBytes, &params); err != nil {
 		return
 	}
 
-	if !params.Kdf.Algorithm.Equal(OidPBKDF2) {
+	if !params.Kdf.Algorithm.Equal(oidPBKDF2) {
 		err = NotImplementedError("kdf algorithm " + params.Kdf.Algorithm.String() + " is not supported")
 		return
 	}
@@ -313,16 +341,38 @@ func pbes2CipherFor(algorithm pkix.AlgorithmIdentifier, password []byte) (block 
 
 	var prf func() hash.Hash
 	switch {
-	case kdfParams.Prf.Algorithm.Equal(OidHmacWithSHA256):
-		prf = sha256.New
+	case kdfParams.Prf.Algorithm.Equal(OidHmacWithMD5):
+		prf = md5.New
 	case kdfParams.Prf.Algorithm.Equal(OidHmacWithSHA1):
 		prf = sha1.New
+	case kdfParams.Prf.Algorithm.Equal(OidHmacWithSHA256_224):
+		prf = sha256.New224
+	case kdfParams.Prf.Algorithm.Equal(OidHmacWithSHA256):
+		prf = sha256.New
+	case kdfParams.Prf.Algorithm.Equal(OidHmacWithSHA512_384):
+		prf = sha512.New384
+	case kdfParams.Prf.Algorithm.Equal(OidHmacWithSHA512):
+		prf = sha512.New
+	case kdfParams.Prf.Algorithm.Equal(OidHmacWithSHA512_224):
+		prf = sha512.New512_224
+	case kdfParams.Prf.Algorithm.Equal(OidHmacWithSHA512_256):
+		prf = sha512.New512_256
+	case kdfParams.Prf.Algorithm.Equal(OidHmacWithSHA3_224):
+		prf = sha3.New224
+	case kdfParams.Prf.Algorithm.Equal(OidHmacWithSHA3_256):
+		prf = sha3.New256
+	case kdfParams.Prf.Algorithm.Equal(OidHmacWithSHA3_384):
+		prf = sha3.New384
+	case kdfParams.Prf.Algorithm.Equal(OidHmacWithSHA3_512):
+		prf = sha3.New512
 	case kdfParams.Prf.Algorithm.Equal(asn1.ObjectIdentifier([]int{})):
 		prf = sha1.New
 	}
 
 	iv = params.EncryptionScheme.Parameters.Bytes
 	salt = kdfParams.Salt.Bytes
+	HMACAlgorithm = kdfParams.Prf.Algorithm
+	EncryptionAlgorithm = params.EncryptionScheme.Algorithm
 
 	switch {
 	case params.EncryptionScheme.Algorithm.Equal(OidAES128CBC):
@@ -350,13 +400,13 @@ func pbes2CipherFor(algorithm pkix.AlgorithmIdentifier, password []byte) (block 
 }
 
 // decryptable abstracts an object that contains ciphertext.
-type decryptable interface {
+type Decryptable interface {
 	Algorithm() pkix.AlgorithmIdentifier
 	Data() []byte
 }
 
 func pbEncrypterFor(algorithm pkix.AlgorithmIdentifier, password []byte) (cipher.BlockMode, int, error) {
-	block, iv, _, err := pbeCipherFor(algorithm, password)
+	block, iv, _, _, _, err := pbeCipherFor(algorithm, password)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -398,7 +448,7 @@ type encryptable interface {
 	SetData([]byte)
 }
 
-func makePBES2Parameters(rand io.Reader, salt []byte, iterations int) ([]byte, error) {
+func makePBES2Parameters(rand io.Reader, hmacAlgorithm, encryptionAlgorithm asn1.ObjectIdentifier, salt []byte, iterations int) ([]byte, error) {
 	var err error
 
 	randomIV := make([]byte, 16)
@@ -411,14 +461,20 @@ func makePBES2Parameters(rand io.Reader, salt []byte, iterations int) ([]byte, e
 		return nil, err
 	}
 	kdfparams.Iterations = iterations
-	kdfparams.Prf.Algorithm = OidHmacWithSHA256
+	if hmacAlgorithm == nil {
+		return nil, errors.New("PBES2 HMAC Algorithm must be specified")
+	}
+	kdfparams.Prf.Algorithm = hmacAlgorithm
 
 	var params pbes2Params
-	params.Kdf.Algorithm = OidPBKDF2
+	params.Kdf.Algorithm = oidPBKDF2
 	if params.Kdf.Parameters.FullBytes, err = asn1.Marshal(kdfparams); err != nil {
 		return nil, err
 	}
-	params.EncryptionScheme.Algorithm = OidAES256CBC
+	if encryptionAlgorithm == nil {
+		return nil, errors.New("PBES2 Encryption Algorithm must be specified")
+	}
+	params.EncryptionScheme.Algorithm = encryptionAlgorithm
 	if params.EncryptionScheme.Parameters.FullBytes, err = asn1.Marshal(randomIV); err != nil {
 		return nil, err
 	}

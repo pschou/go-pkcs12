@@ -331,17 +331,28 @@ func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certi
 // Password, NoPassword, and KeyBagAlgorithm will be used for all the key
 // bags.
 type P12 struct {
-	SkipDecodeErrors                                bool
-	CertEntries                                     []CertEntry
-	KeyEntries                                      []KeyEntry
-	MACAlgorithm, CertBagAlgorithm, KeyBagAlgorithm asn1.ObjectIdentifier
-	Password                                        []rune
-	NoPassword                                      bool
-	MACIterations, EncryptionIterations             uint
-	random                                          io.Reader
-	macSalt, safeSalt                               []byte
-	CustomKeyEncrypt                                func(*KeyEntry) ([]byte, error)
-	CustomKeyDecrypt                                func(*KeyEntry, []byte) error
+	SkipDecodeErrors bool
+	CertEntries      []CertEntry
+	KeyEntries       []KeyEntry
+
+	// Password based encryption settings
+	Password []rune
+
+	// These are defined when a password is provided, if left undefined defaults will be set
+	MACAlgorithm, EncryptionAlgorithm   asn1.ObjectIdentifier
+	MACIterations, EncryptionIterations uint
+	KeyBagAlgorithm, CertBagAlgorithm   asn1.ObjectIdentifier
+
+	// When PBES2 is used
+	PBES2_HMACAlgorithm, PBES2_EncryptionAlgorithm asn1.ObjectIdentifier
+
+	random            io.Reader
+	macSalt, safeSalt []byte
+
+	// If unique passwords or algorithms must be assigned to each key, a custom callback may be defined
+	CustomKeyEncrypt       func(ke *KeyEntry) (encrypted []byte, isEncrypted bool, err error)
+	CustomKeyDecrypt       func(ke *KeyEntry, payload []byte) error
+	CustomContainerDecrypt func(info Decryptable, password []byte) (decrypted []byte, err error)
 }
 
 type CertEntry struct {
@@ -451,16 +462,12 @@ func Unmarshal(pfxData []byte, p12 *P12) (err error) {
 		encodedPassword = []byte{0, 0}
 	}
 
-	bags, encodedPassword, algorithm, macAlgorithm, iterations, salt, err := getSafeContents(pfxData, encodedPassword)
-
+	var bags []safeBag
+	bags, encodedPassword, p12.MACAlgorithm, p12.MACIterations,
+		p12.PBES2_HMACAlgorithm, p12.EncryptionAlgorithm, p12.macSalt, err = getSafeContents(pfxData, encodedPassword, p12.CustomKeyDecrypt, p12.CustomContainerDecrypt)
 	if err != nil {
 		return err
 	}
-
-	p12.CertBagAlgorithm = algorithm
-	p12.MACAlgorithm = macAlgorithm
-	p12.MACIterations = uint(iterations)
-	p12.macSalt = salt
 
 	// Update the Password property
 	if encodedPassword == nil {
@@ -579,7 +586,7 @@ func Unmarshal(pfxData []byte, p12 *P12) (err error) {
 					continue
 				}
 			} else {
-				k.Key, p12.KeyBagAlgorithm, k.salt, err = decodePkcs8ShroudedKeyBag(bag.Value.Bytes, encodedPassword)
+				k.Key, _, _, _, _, err = decodePkcs8ShroudedKeyBag(bag.Value.Bytes, encodedPassword)
 				if err != nil {
 					if p12.SkipDecodeErrors {
 						continue
@@ -601,13 +608,20 @@ func Unmarshal(pfxData []byte, p12 *P12) (err error) {
 
 // TrustStore represents a Java TrustStore in P12 format.
 type TrustStore struct {
-	Entries                             []TrustStoreEntry
-	MACAlgorithm                        asn1.ObjectIdentifier
-	CertBagAlgorithm                    asn1.ObjectIdentifier
-	random                              io.Reader
-	Password                            []rune
-	macSalt                             []byte
-	MACIterations, EncryptionIterations uint
+	Entries []TrustStoreEntry
+
+	Password                                       []rune
+	MACAlgorithm, EncryptionAlgorithm              asn1.ObjectIdentifier
+	MACIterations, EncryptionIterations            uint
+	CertBagAlgorithm                               asn1.ObjectIdentifier
+	PBES2_HMACAlgorithm, PBES2_EncryptionAlgorithm asn1.ObjectIdentifier
+	random                                         io.Reader
+	macSalt                                        []byte
+
+	// If unique passwords or algorithms must be assigned to each key, a custom callback may be defined
+	CustomKeyEncrypt       func(*KeyEntry) ([]byte, error)
+	CustomKeyDecrypt       func(*KeyEntry, []byte) error
+	CustomContainerDecrypt func(info Decryptable, password []byte) (decrypted []byte, err error)
 }
 
 // TrustStoreEntry represents an entry in a Java TrustStore.
@@ -621,10 +635,14 @@ type TrustStoreEntry struct {
 
 func NewTrustStoreWithPassword(password []rune) *TrustStore {
 	return &TrustStore{
-		random:           rand.Reader,
-		CertBagAlgorithm: OidPBEWithSHAAnd40BitRC2CBC,
-		MACAlgorithm:     OidSHA1,
-		Password:         password,
+		random:                    rand.Reader,
+		Password:                  password,
+		MACIterations:             1000,
+		EncryptionIterations:      1000,
+		MACAlgorithm:              OidSHA1,
+		EncryptionAlgorithm:       OidPBEWithSHAAnd40BitRC2CBC,
+		PBES2_HMACAlgorithm:       OidHmacWithSHA256,
+		PBES2_EncryptionAlgorithm: OidAES256CBC,
 	}
 }
 
@@ -667,18 +685,11 @@ func UnmarshalTrustStore(pfxData []byte, ts *TrustStore) (err error) {
 		}
 	}
 
-	bags, encodedPassword, algorithm, macAlgorithm, iterations, salt, err := getSafeContents(pfxData, encodedPassword)
+	var bags []safeBag
+	bags, encodedPassword, ts.MACAlgorithm, ts.MACIterations, ts.PBES2_HMACAlgorithm, ts.EncryptionAlgorithm, ts.macSalt,
+		err = getSafeContents(pfxData, encodedPassword, ts.CustomKeyDecrypt, ts.CustomContainerDecrypt)
 	if err != nil {
 		return err
-	}
-	ts.CertBagAlgorithm = algorithm
-	ts.MACAlgorithm = macAlgorithm
-	ts.MACIterations = uint(iterations)
-	ts.macSalt = salt
-
-	// Update the Password property
-	if encodedPassword == nil || macAlgorithm == nil {
-		ts.Password = nil
 	}
 
 	for _, bag := range bags {
@@ -738,8 +749,12 @@ func UnmarshalTrustStore(pfxData []byte, ts *TrustStore) (err error) {
 	return
 }
 
-func getSafeContents(p12Data, password []byte) (bags []safeBag, updatedPassword []byte,
-	algorithm, macAlgorithm asn1.ObjectIdentifier, iterations int, salt []byte, err error) {
+func getSafeContents(p12Data, password []byte,
+	CustomKeyDecrypt func(*KeyEntry, []byte) error,
+	CustomContainerDecrypt func(info Decryptable, password []byte) (decrypted []byte, err error)) (bags []safeBag, updatedPassword []byte,
+	macAlgorithm asn1.ObjectIdentifier, macIterations uint,
+	HMACAlgorithm, EncryptionAlgorithm asn1.ObjectIdentifier, macSalt []byte, err error) {
+
 	pfx := new(pfxPdu)
 	if err = unmarshal(p12Data, pfx); err != nil {
 		err = errors.New("pkcs12: error reading P12 data: " + err.Error())
@@ -778,9 +793,10 @@ func getSafeContents(p12Data, password []byte) (bags []safeBag, updatedPassword 
 			return
 		}
 	}
+
 	macAlgorithm = pfx.MacData.Mac.Algorithm.Algorithm
-	iterations = pfx.MacData.Iterations
-	salt = pfx.MacData.MacSalt
+	macIterations = uint(pfx.MacData.Iterations)
+	macSalt = pfx.MacData.MacSalt
 	updatedPassword = password
 
 	var authenticatedSafe []contentInfo
@@ -796,7 +812,6 @@ func getSafeContents(p12Data, password []byte) (bags []safeBag, updatedPassword 
 			if err = unmarshal(ci.Content.Bytes, &data); err != nil {
 				return
 			}
-			algorithm = OidDataContentType
 		case ci.ContentType.Equal(oidEncryptedDataContentType):
 			var encryptedData encryptedData
 			if err = unmarshal(ci.Content.Bytes, &encryptedData); err != nil {
@@ -806,10 +821,15 @@ func getSafeContents(p12Data, password []byte) (bags []safeBag, updatedPassword 
 				err = NotImplementedError("only version 0 of EncryptedData is supported")
 				return
 			}
-			if data, salt, err = pbDecrypt(encryptedData.EncryptedContentInfo, password); err != nil {
-				return
+			if CustomContainerDecrypt != nil {
+				if data, err = CustomContainerDecrypt(encryptedData.EncryptedContentInfo, password); err != nil {
+					return
+				}
+			} else {
+				if data, _, HMACAlgorithm, EncryptionAlgorithm, err = pbDecrypt(encryptedData.EncryptedContentInfo, password); err != nil {
+					return
+				}
 			}
-			algorithm = encryptedData.EncryptedContentInfo.Algorithm().Algorithm
 		default:
 			err = NotImplementedError("only data and encryptedData content types are supported in authenticated safe")
 			return
@@ -829,7 +849,7 @@ func getSafeContents(p12Data, password []byte) (bags []safeBag, updatedPassword 
 func New() *P12 {
 	return &P12{
 		KeyBagAlgorithm:      OidPBEWithSHAAnd3KeyTripleDESCBC,
-		CertBagAlgorithm:     OidPBEWithSHAAnd40BitRC2CBC,
+		EncryptionAlgorithm:  OidPBEWithSHAAnd40BitRC2CBC,
 		MACAlgorithm:         OidSHA1,
 		MACIterations:        2048,
 		EncryptionIterations: 2048,
@@ -841,7 +861,7 @@ func New() *P12 {
 func NewWithPassword(password []rune) P12 {
 	return P12{
 		KeyBagAlgorithm:      OidPBEWithSHAAnd3KeyTripleDESCBC,
-		CertBagAlgorithm:     OidPBEWithSHAAnd40BitRC2CBC,
+		EncryptionAlgorithm:  OidPBEWithSHAAnd40BitRC2CBC,
 		MACAlgorithm:         OidSHA1,
 		random:               rand.Reader,
 		MACIterations:        2048,
@@ -999,7 +1019,13 @@ func Encode(rand io.Reader, privateKey interface{}, certificate *x509.Certificat
 //	})
 func Marshal(p12 *P12) (pfxData []byte, err error) {
 	var encodedPassword []byte
-	if !(p12.MACAlgorithm == nil || p12.CertBagAlgorithm == nil) {
+	if p12.MACAlgorithm == nil || p12.EncryptionAlgorithm == nil || p12.MACIterations == 0 || p12.EncryptionIterations == 0 {
+		if p12.MACIterations > 0 || p12.EncryptionIterations > 0 || p12.MACAlgorithm != nil || p12.EncryptionAlgorithm != nil {
+			err = errors.New("Cannot marshal with password based encryption.  MACAlgorithm & EncryptionAlgorithm must be set and MACIterations & EncryptionIterations must be greater than 0")
+			return
+		}
+	} else {
+		// Password based encryption enabled
 		encodedPassword, err = bmpSliceZeroTerminated(p12.Password)
 		if err != nil {
 			return nil, err
@@ -1046,35 +1072,40 @@ func Marshal(p12 *P12) (pfxData []byte, err error) {
 		setKeyID(keyBag, k.Key)
 		setFriendlyName(keyBag, k.FriendlyName)
 
-		if p12.KeyBagAlgorithm == nil {
-			keyBag.Id = oidKeyBag
-			if keyBag.Value.Bytes, err = x509.MarshalPKCS8PrivateKey(k.Key); err != nil {
+		if p12.CustomKeyEncrypt != nil {
+			// Call a custom algorithm if specified
+			var encrypted bool
+			keyBag.Value.Bytes, encrypted, err = p12.CustomKeyEncrypt(&k)
+			if err != nil {
 				return nil, err
 			}
+			if encrypted {
+				keyBag.Id = oidPKCS8ShroundedKeyBag
+			} else {
+				keyBag.Id = oidKeyBag
+			}
+			if len(keyBag.Value.Bytes) == 0 {
+				// Skip trying to decode this key
+				continue
+			}
 		} else {
-			keyBag.Id = oidPKCS8ShroundedKeyBag
-			// Call a custom algorithm if specified
-			if p12.CustomKeyEncrypt != nil {
-				keyBag.Value.Bytes, err = p12.CustomKeyEncrypt(&k)
-				if err != nil {
+			// Otherwise use the built-in
+			if p12.KeyBagAlgorithm == nil {
+				keyBag.Id = oidKeyBag
+				if keyBag.Value.Bytes, err = x509.MarshalPKCS8PrivateKey(k.Key); err != nil {
 					return nil, err
 				}
-				if len(keyBag.Value.Bytes) == 0 {
-					// Skip trying to decode this key
-					continue
-				}
-
 			} else {
-				// Otherwise use the built-in
+				keyBag.Id = oidPKCS8ShroundedKeyBag
 				if len(k.salt) == 0 {
-					k.salt = make([]byte, 8)
+					k.salt = make([]byte, 16)
 					if _, err = rand.Read(k.salt); err != nil {
 						return nil, errors.New("pkcs12: error reading random salt: " + err.Error())
 					}
 				}
 
 				if keyBag.Value.Bytes, err = encodePkcs8ShroudedKeyBag(p12.random, k.Key,
-					encodedPassword, p12.KeyBagAlgorithm, p12.EncryptionIterations, k.salt); err != nil {
+					encodedPassword, p12.KeyBagAlgorithm, p12.PBES2_HMACAlgorithm, p12.PBES2_EncryptionAlgorithm, p12.EncryptionIterations, k.salt); err != nil {
 					return nil, err
 				}
 			}
@@ -1094,11 +1125,6 @@ func Marshal(p12 *P12) (pfxData []byte, err error) {
 	// The second SafeContents is unencrypted and contains the shrouded key bag.
 	var authenticatedSafe [2]contentInfo
 
-	// Ensure a minimum number of iterations
-	if p12.EncryptionIterations == 0 {
-		p12.EncryptionIterations = 1
-	}
-
 	if len(p12.safeSalt) == 0 {
 		p12.safeSalt = make([]byte, 8)
 		if _, err = p12.random.Read(p12.safeSalt); err != nil {
@@ -1106,11 +1132,11 @@ func Marshal(p12 *P12) (pfxData []byte, err error) {
 		}
 	}
 
-	if authenticatedSafe[0], err = makeSafeContents(p12.random, p12.CertBagAlgorithm, certBags, encodedPassword,
+	if authenticatedSafe[0], err = makeSafeContents(p12.random, p12.CertBagAlgorithm, p12.PBES2_HMACAlgorithm, p12.PBES2_EncryptionAlgorithm, certBags, encodedPassword,
 		int(p12.EncryptionIterations), p12.safeSalt); err != nil {
 		return nil, err
 	}
-	if authenticatedSafe[1], err = makeSafeContents(p12.random, nil, keyBags, nil, 0, nil); err != nil {
+	if authenticatedSafe[1], err = makeSafeContents(p12.random, nil, nil, nil, keyBags, nil, 0, nil); err != nil {
 		return nil, err
 	}
 
@@ -1246,14 +1272,16 @@ func EncodeTrustStoreEntries(rand io.Reader, entries []TrustStoreEntry, password
 // to use for for securing the PFX.
 func MarshalTrustStore(ts *TrustStore) (pfxData []byte, err error) {
 	var encodedPassword []byte
-	if !(ts.MACAlgorithm == nil || ts.CertBagAlgorithm == nil) {
+	if ts.MACAlgorithm == nil || ts.EncryptionAlgorithm == nil || ts.MACIterations == 0 || ts.EncryptionIterations == 0 {
+		if ts.MACIterations > 0 || ts.EncryptionIterations > 0 || ts.MACAlgorithm != nil || ts.EncryptionAlgorithm != nil {
+			err = errors.New("Cannot marshal with password based encryption.  MACAlgorithm & EncryptionAlgorithm must be set and MACIterations & EncryptionIterations must be greater than 0")
+			return
+		}
+	} else {
+		// Password based encryption enabled
 		encodedPassword, err = bmpSliceZeroTerminated(ts.Password)
 		if err != nil {
 			return nil, err
-		}
-	} else {
-		if len(ts.Password) > 0 {
-			return nil, errors.New("pkcs12: MAC and Cert Algorithms must be provided when a password is defined")
 		}
 	}
 
@@ -1295,7 +1323,7 @@ func MarshalTrustStore(ts *TrustStore) (pfxData []byte, err error) {
 	if ts.EncryptionIterations == 0 {
 		ts.EncryptionIterations = 1
 	}
-	if authenticatedSafe[0], err = makeSafeContents(ts.random, ts.CertBagAlgorithm, certBags, encodedPassword, int(ts.EncryptionIterations), ts.macSalt); err != nil {
+	if authenticatedSafe[0], err = makeSafeContents(ts.random, ts.CertBagAlgorithm, ts.PBES2_HMACAlgorithm, ts.PBES2_EncryptionAlgorithm, certBags, encodedPassword, int(ts.EncryptionIterations), ts.macSalt); err != nil {
 		return nil, err
 	}
 
@@ -1352,7 +1380,7 @@ func makeCertBag(certBytes []byte) (certBag *safeBag, err error) {
 	return
 }
 
-func makeSafeContents(random io.Reader, algorithm asn1.ObjectIdentifier, bags []safeBag, password []byte, iterations int, salt []byte) (ci contentInfo, err error) {
+func makeSafeContents(random io.Reader, algorithm, pbes2Hash, pbes2Enc asn1.ObjectIdentifier, bags []safeBag, password []byte, iterations int, salt []byte) (ci contentInfo, err error) {
 	var data []byte
 	if data, err = asn1.Marshal(bags); err != nil {
 		return
@@ -1370,7 +1398,7 @@ func makeSafeContents(random io.Reader, algorithm asn1.ObjectIdentifier, bags []
 		var algo pkix.AlgorithmIdentifier
 		algo.Algorithm = algorithm
 		if algorithm.Equal(OidPBES2) {
-			if algo.Parameters.FullBytes, err = makePBES2Parameters(random, salt, iterations); err != nil {
+			if algo.Parameters.FullBytes, err = makePBES2Parameters(random, pbes2Hash, pbes2Enc, salt, iterations); err != nil {
 				return
 			}
 		} else {
