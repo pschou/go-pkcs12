@@ -21,36 +21,79 @@ import (
 	"hash"
 	"io"
 
+	gost256 "github.com/pedroalbanese/gogost/gost34112012256"
+	gost512 "github.com/pedroalbanese/gogost/gost34112012512"
 	"github.com/pschou/go-pkcs12/internal/rc2"
 	"golang.org/x/crypto/pbkdf2"
 	"golang.org/x/crypto/sha3"
 )
 
 var (
+	// Password based encryption
+	OidPBES2  = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 5, 13})
+	oidPBKDF2 = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 5, 12})
+
+	// PBE algorithms
 	OidPBEWithSHAAnd128BitRC4        = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 12, 1, 1})
 	OidPBEWithSHAAnd40BitRC4         = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 12, 1, 2})
 	OidPBEWithSHAAnd3KeyTripleDESCBC = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 12, 1, 3})
 	OidPBEWithSHAAnd2KeyTripleDESCBC = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 12, 1, 4})
 	OidPBEWithSHAAnd128BitRC2CBC     = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 12, 1, 5})
 	OidPBEWithSHAAnd40BitRC2CBC      = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 12, 1, 6})
-	OidPBES2                         = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 5, 13})
-	oidPBKDF2                        = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 5, 12})
-	OidHmacWithMD5                   = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 6})
-	OidHmacWithSHA1                  = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 7})
-	OidHmacWithSHA256_224            = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 8})
-	OidHmacWithSHA256                = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 9})
-	OidHmacWithSHA512_384            = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 10})
-	OidHmacWithSHA512                = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 11})
-	OidHmacWithSHA512_224            = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 12})
-	OidHmacWithSHA512_256            = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 13})
-	OidAES128CBC                     = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 1, 2})
-	OidAES192CBC                     = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 1, 22})
-	OidAES256CBC                     = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 1, 42})
-	OidHmacWithSHA3_224              = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 13})
-	OidHmacWithSHA3_256              = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 14})
-	OidHmacWithSHA3_384              = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 15})
-	OidHmacWithSHA3_512              = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 16})
+
+	// PBES2 HMAC algorithms
+	OidHmacWithGOST3411_256 = asn1.ObjectIdentifier([]int{1, 2, 643, 7, 1, 1, 4, 1})
+	OidHmacWithGOST3411_512 = asn1.ObjectIdentifier([]int{1, 2, 643, 7, 1, 1, 4, 2})
+	OidHmacWithMD5          = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 6})
+	OidHmacWithSHA1         = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 7})
+	OidHmacWithSHA256_224   = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 8})
+	OidHmacWithSHA256       = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 9})
+	OidHmacWithSHA512_384   = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 10})
+	OidHmacWithSHA512       = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 11})
+	OidHmacWithSHA512_224   = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 12})
+	OidHmacWithSHA512_256   = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 13})
+	OidHmacWithSHA3_224     = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 13})
+	OidHmacWithSHA3_256     = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 14})
+	OidHmacWithSHA3_384     = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 15})
+	OidHmacWithSHA3_512     = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 16})
+
+	// PBES2 Stream ciphers
+	OidAES128CBC = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 1, 2})
+	OidAES192CBC = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 1, 22})
+	OidAES256CBC = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 1, 42})
 )
+
+var PBE_Algorithms_Available = map[string]asn1.ObjectIdentifier{
+	"PBEWithSHAAnd128BitRC4":        OidPBEWithSHAAnd128BitRC4,
+	"PBEWithSHAAnd40BitRC4":         OidPBEWithSHAAnd40BitRC4,
+	"PBEWithSHAAnd3KeyTripleDESCBC": OidPBEWithSHAAnd3KeyTripleDESCBC,
+	"PBEWithSHAAnd2KeyTripleDESCBC": OidPBEWithSHAAnd2KeyTripleDESCBC,
+	"PBEWithSHAAnd128BitRC2CBC":     OidPBEWithSHAAnd128BitRC2CBC,
+	"PBEWithSHAAnd40BitRC2CBC":      OidPBEWithSHAAnd40BitRC2CBC,
+}
+
+var PBES2_Ciphers_Available = map[string]asn1.ObjectIdentifier{
+	"AES128CBC": OidAES128CBC,
+	"AES192CBC": OidAES192CBC,
+	"AES256CBC": OidAES256CBC,
+}
+
+var PBES2_HMACs_Available = map[string]asn1.ObjectIdentifier{
+	"GOST3411_256": OidHmacWithGOST3411_256,
+	"GOST3411_512": OidHmacWithGOST3411_512,
+	"MD5":          OidHmacWithMD5,
+	"SHA1":         OidHmacWithSHA1,
+	"SHA256_224":   OidHmacWithSHA256_224,
+	"SHA256":       OidHmacWithSHA256,
+	"SHA512_384":   OidHmacWithSHA512_384,
+	"SHA512":       OidHmacWithSHA512,
+	"SHA512_224":   OidHmacWithSHA512_224,
+	"SHA512_256":   OidHmacWithSHA512_256,
+	"SHA3_224":     OidHmacWithSHA3_224,
+	"SHA3_256":     OidHmacWithSHA3_256,
+	"SHA3_384":     OidHmacWithSHA3_384,
+	"SHA3_512":     OidHmacWithSHA3_512,
+}
 
 // pbeCipher is an abstraction of a PKCS#12 cipher.
 type pbeCipher interface {
@@ -341,6 +384,10 @@ func pbes2CipherFor(algorithm pkix.AlgorithmIdentifier, password []byte) (block 
 
 	var prf func() hash.Hash
 	switch {
+	case kdfParams.Prf.Algorithm.Equal(OidHmacWithGOST3411_256):
+		prf = gost256.New
+	case kdfParams.Prf.Algorithm.Equal(OidHmacWithGOST3411_512):
+		prf = gost512.New
 	case kdfParams.Prf.Algorithm.Equal(OidHmacWithMD5):
 		prf = md5.New
 	case kdfParams.Prf.Algorithm.Equal(OidHmacWithSHA1):

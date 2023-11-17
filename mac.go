@@ -34,7 +34,7 @@ type digestInfo struct {
 	Digest    []byte
 }
 
-var MACsAvailable = map[string]asn1.ObjectIdentifier{
+var PBE_MACs_Available = map[string]asn1.ObjectIdentifier{
 	"GOST256":       OidGOST3411_256,
 	"GOST512":       OidGOST3411_512,
 	"MD2":           OidMD2,
