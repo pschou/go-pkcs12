@@ -291,7 +291,7 @@ func pbDecrypterFor(algorithm pkix.AlgorithmIdentifier, password []byte) (blockM
 	return
 }
 
-func ContainerDecrypt(info Decryptable, password []byte) (decrypted []byte, salt []byte, HMACAlgorithm, EncryptionAlgorithm asn1.ObjectIdentifier, err error) {
+func BagDecrypt(info Decryptable, password []byte) (decrypted []byte, salt []byte, HMACAlgorithm, EncryptionAlgorithm asn1.ObjectIdentifier, err error) {
 	return pbDecrypt(info, password)
 }
 
@@ -473,7 +473,11 @@ func pbEncrypterFor(algorithm pkix.AlgorithmIdentifier, password []byte) (cipher
 	return cipher.NewCBCEncrypter(block, iv), block.BlockSize(), nil
 }
 
-func pbEncrypt(info encryptable, decrypted []byte, password []byte) error {
+func BagEncrypt(info Encryptable, decrypted, password []byte) (err error) {
+	return pbEncrypt(info, decrypted, password)
+}
+
+func pbEncrypt(info Encryptable, decrypted []byte, password []byte) error {
 	cbc, blockSize, err := pbEncrypterFor(info.Algorithm(), password)
 	if err != nil {
 		return err
@@ -491,7 +495,7 @@ func pbEncrypt(info encryptable, decrypted []byte, password []byte) error {
 }
 
 // encryptable abstracts a object that contains ciphertext.
-type encryptable interface {
+type Encryptable interface {
 	Algorithm() pkix.AlgorithmIdentifier
 	SetData([]byte)
 }
