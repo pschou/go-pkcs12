@@ -70,6 +70,7 @@ var PBE_Algorithms_Available = map[string]asn1.ObjectIdentifier{
 	"PBEWithSHAAnd2KeyTripleDESCBC": OidPBEWithSHAAnd2KeyTripleDESCBC,
 	"PBEWithSHAAnd128BitRC2CBC":     OidPBEWithSHAAnd128BitRC2CBC,
 	"PBEWithSHAAnd40BitRC2CBC":      OidPBEWithSHAAnd40BitRC2CBC,
+	"PBES2":                         OidPBES2,
 }
 
 var PBES2_Ciphers_Available = map[string]asn1.ObjectIdentifier{
