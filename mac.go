@@ -14,7 +14,7 @@ import (
 	"encoding/asn1"
 	"hash"
 
-	"golang.org/x/crypto/sha3"
+	sha3 "github.com/ebfe/keccak"
 )
 
 type macData struct {
@@ -27,6 +27,22 @@ type macData struct {
 type digestInfo struct {
 	Algorithm pkix.AlgorithmIdentifier
 	Digest    []byte
+}
+
+var MACsAvailable = map[string]asn1.ObjectIdentifier{
+	"SHA1":          asn1.ObjectIdentifier([]int{1, 3, 14, 3, 2, 26}),
+	"SHA256":        asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 1}),
+	"SHA384":        asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 2}),
+	"SHA512":        asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 3}),
+	"SHA256_224":    asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 4}),
+	"SHA512_224":    asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 5}),
+	"SHA512_256":    asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 6}),
+	"SHA3_224":      asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 7}),
+	"SHA3_256":      asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 8}),
+	"SHA3_384":      asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 9}),
+	"SHA3_512":      asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 10}),
+	"SHA3_SHAKE128": asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 11}),
+	"SHA3_SHAKE256": asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 12}),
 }
 
 var (
@@ -83,10 +99,10 @@ func doMac(macData *macData, message, password []byte) ([]byte, error) {
 		hFn = sha3.New512
 		key = pbkdf(hFn, 64, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
 	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA3_SHAKE128):
-		hFn = NewShake128
+		hFn = func() hash.Hash { return sha3.NewSHAKE128(16) }
 		key = pbkdf(hFn, 16, 64, macData.MacSalt, password, macData.Iterations, 3, 16)
 	case macData.Mac.Algorithm.Algorithm.Equal(OidSHA3_SHAKE256):
-		hFn = NewShake256
+		hFn = func() hash.Hash { return sha3.NewSHAKE256(32) }
 		key = pbkdf(hFn, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
 	default:
 		return nil, NotImplementedError("unknown digest algorithm: " + macData.Mac.Algorithm.Algorithm.String())

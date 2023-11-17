@@ -6,62 +6,13 @@ package pkcs12
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"hash"
 	"math/big"
-
-	"golang.org/x/crypto/sha3"
 )
 
 var (
 	one = big.NewInt(1)
 )
-
-func NewShake128() hash.Hash {
-	return &shake128{}
-}
-
-type shake128 struct{}
-
-func (shake128) Write(p []byte) (n int, err error) { return 0, nil }
-func (shake128) Reset()                            {}
-func (shake128) Size() int                         { return 0 }
-func (shake128) BlockSize() int                    { return 0 }
-
-// shake128 does the sha3-shake128
-func (shake128) Sum(in []byte) []byte {
-	h := make([]byte, 16)
-	d := sha3.NewShake128()
-	d.Write(in)
-	d.Read(h)
-	return h
-}
-
-func NewShake256() hash.Hash {
-	return &shake256{}
-}
-
-type shake256 struct{}
-
-func (shake256) Write(p []byte) (n int, err error) { return 0, nil }
-func (shake256) Reset()                            {}
-func (shake256) Size() int                         { return 0 }
-func (shake256) BlockSize() int                    { return 0 }
-
-// shake256 does the sha3-shake256
-func (shake256) Sum(in []byte) []byte {
-	h := make([]byte, 32)
-	d := sha3.NewShake256()
-	d.Write(in)
-	d.Read(h)
-	return h
-}
-
-// sha256Sum returns the SHA-256 hash of in.
-func sha256Sum(in []byte) []byte {
-	sum := sha256.Sum256(in)
-	return sum[:]
-}
 
 // fillWithRepeats returns v*ceiling(len(pattern) / v) bytes consisting of
 // repeats of pattern.
@@ -154,7 +105,7 @@ func pbkdf(hashFn func() hash.Hash, u, v int, salt, password []byte, r int, ID b
 		hash.Write(append(D, I...))
 		Ai := hash.Sum(nil)
 		for j := 1; j < r; j++ {
-			hash = hashFn()
+			hash.Reset()
 			hash.Write(Ai)
 			Ai = hash.Sum(nil)
 		}
