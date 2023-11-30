@@ -454,7 +454,7 @@ func pbes2CipherFor(algorithm pkix.AlgorithmIdentifier, password []byte) (block 
 			return
 		}
 	case params.EncryptionScheme.Algorithm.Equal(OidEncryptionAlgorithmDESEDE3CBC):
-		key := pbkdf2.Key(password, kdfParams.Salt.Bytes, kdfParams.Iterations, 8, prf)
+		key := pbkdf2.Key(password, kdfParams.Salt.Bytes, kdfParams.Iterations, 24, prf)
 		block, err = des.NewTripleDESCipher(key)
 		if err != nil {
 			return
