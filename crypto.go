@@ -80,9 +80,11 @@ var PBE_Algorithms_Available = map[string]asn1.ObjectIdentifier{
 }
 
 var PBES2_Ciphers_Available = map[string]asn1.ObjectIdentifier{
-	"AES128CBC": OidEncryptionAlgorithmAES128CBC,
-	"AES192CBC": OidEncryptionAlgorithmAES192CBC,
-	"AES256CBC": OidEncryptionAlgorithmAES256CBC,
+	"AES128CBC":    OidEncryptionAlgorithmAES128CBC,
+	"AES192CBC":    OidEncryptionAlgorithmAES192CBC,
+	"AES256CBC":    OidEncryptionAlgorithmAES256CBC,
+	"DES-CBC":      OidEncryptionAlgorithmDESCBC,
+	"DES-EDE3-CBC": OidEncryptionAlgorithmDESEDE3CBC,
 }
 
 var PBES2_HMACs_Available = map[string]asn1.ObjectIdentifier{
