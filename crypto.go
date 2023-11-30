@@ -297,8 +297,14 @@ func pbDecrypterFor(algorithm pkix.AlgorithmIdentifier, password []byte) (blockM
 	return
 }
 
-func BagDecrypt(info Decryptable, password []byte) (decrypted []byte, salt []byte, HMACAlgorithm, EncryptionAlgorithm asn1.ObjectIdentifier, err error) {
-	return pbDecrypt(info, password)
+func BagDecrypt(info Decryptable, password []rune) (decrypted []byte, salt []byte, HMACAlgorithm, EncryptionAlgorithm asn1.ObjectIdentifier, err error) {
+	p, _ := bmpSliceZeroTerminated(password)
+	defer func() {
+		for i := range p {
+			p[i] = 0
+		}
+	}()
+	return pbDecrypt(info, p)
 }
 
 func pbDecrypt(info Decryptable, password []byte) (decrypted []byte, salt []byte, HMACAlgorithm, EncryptionAlgorithm asn1.ObjectIdentifier, err error) {
@@ -491,8 +497,14 @@ func pbEncrypterFor(algorithm pkix.AlgorithmIdentifier, password []byte) (cipher
 	return cipher.NewCBCEncrypter(block, iv), block.BlockSize(), nil
 }
 
-func BagEncrypt(info Encryptable, decrypted, password []byte) (err error) {
-	return pbEncrypt(info, decrypted, password)
+func BagEncrypt(info Encryptable, decrypted []byte, password []rune) (err error) {
+	p, _ := bmpSliceZeroTerminated(password)
+	defer func() {
+		for i := range p {
+			p[i] = 0
+		}
+	}()
+	return pbEncrypt(info, decrypted, p)
 }
 
 func pbEncrypt(info Encryptable, decrypted []byte, password []byte) error {
