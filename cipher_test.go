@@ -147,7 +147,7 @@ cLXjHUOhDDyqBAhlzWP0LJxhZQICCAA=`
 		newP12.KeyBagAlgorithm = oid
 		newP12.CertBagAlgorithm = oid
 		newP12.PBES2_HMACAlgorithm = pkcs12.OidHmacWithSHA256
-		newP12.PBES2_EncryptionAlgorithm = pkcs12.OidAES256CBC
+		newP12.PBES2_EncryptionAlgorithm = pkcs12.OidEncryptionAlgorithmAES256CBC
 		var out []byte
 		out, err = pkcs12.Marshal(&newP12)
 		if err != nil {
