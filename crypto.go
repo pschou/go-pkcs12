@@ -532,7 +532,10 @@ type Encryptable interface {
 	SetData([]byte)
 }
 
-func makePBES2Parameters(rand io.Reader, hmacAlgorithm, encryptionAlgorithm asn1.ObjectIdentifier, salt []byte, iterations int) ([]byte, error) {
+func MakePBEParameters(salt []byte, iterations int) ([]byte, error) {
+	return asn1.Marshal(pbeParams{Salt: salt, Iterations: iterations})
+}
+func MakePBES2Parameters(rand io.Reader, hmacAlgorithm, encryptionAlgorithm asn1.ObjectIdentifier, salt []byte, iterations int) ([]byte, error) {
 	var err error
 
 	randomIV := make([]byte, 16)

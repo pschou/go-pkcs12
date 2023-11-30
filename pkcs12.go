@@ -1406,7 +1406,7 @@ func makeSafeContents(random io.Reader, algorithm, pbes2Hash, pbes2Enc asn1.Obje
 		var algo pkix.AlgorithmIdentifier
 		algo.Algorithm = algorithm
 		if algorithm.Equal(OidPBES2) {
-			if algo.Parameters.FullBytes, err = makePBES2Parameters(random, pbes2Hash, pbes2Enc, salt, iterations); err != nil {
+			if algo.Parameters.FullBytes, err = MakePBES2Parameters(random, pbes2Hash, pbes2Enc, salt, iterations); err != nil {
 				return
 			}
 		} else {
