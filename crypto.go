@@ -538,7 +538,14 @@ func MakePBEParameters(salt []byte, iterations int) ([]byte, error) {
 func MakePBES2Parameters(rand io.Reader, hmacAlgorithm, encryptionAlgorithm asn1.ObjectIdentifier, salt []byte, iterations int) ([]byte, error) {
 	var err error
 
-	randomIV := make([]byte, 16)
+	var randomIV []byte
+	switch {
+	case encryptionAlgorithm.Equal(OidEncryptionAlgorithmDESEDE3CBC) ||
+		encryptionAlgorithm.Equal(OidEncryptionAlgorithmDESCBC):
+		randomIV = make([]byte, 8)
+	default:
+		randomIV = make([]byte, 16)
+	}
 	if _, err := rand.Read(randomIV); err != nil {
 		return nil, err
 	}
