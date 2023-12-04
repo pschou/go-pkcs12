@@ -98,6 +98,8 @@ func encodePkcs8ShroudedKeyBag(rand io.Reader, privateKey interface{}, password 
 		if paramBytes, err = MakePBES2Parameters(rand, pbes2Hash, pbes2Enc, randomSalt, int(iterations)); err != nil {
 			return nil, errors.New("pkcs12: error encoding params: " + err.Error())
 		}
+	} else if algorithm.Equal(OidDataContentType) {
+		// Do nothing
 	} else {
 		if paramBytes, err = asn1.Marshal(pbeParams{Salt: randomSalt, Iterations: int(iterations)}); err != nil {
 			return nil, errors.New("pkcs12: error encoding params: " + err.Error())
