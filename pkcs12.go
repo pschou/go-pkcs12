@@ -1150,7 +1150,7 @@ func Marshal(p12 *P12) (pfxData []byte, err error) {
 		return nil, err
 	}
 
-	if p12.MACAlgorithm != nil {
+	if p12.MACAlgorithm != nil && p12.CertBagAlgorithm != nil && !p12.CertBagAlgorithm.Equal(OidDataContentType) {
 		// compute the MAC
 		pfx.MacData.Mac.Algorithm.Algorithm = p12.MACAlgorithm
 		if len(p12.macSalt) == 0 {
