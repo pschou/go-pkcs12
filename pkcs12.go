@@ -1394,7 +1394,7 @@ func makeSafeContents(random io.Reader, algorithm, pbes2Hash, pbes2Enc asn1.Obje
 		return
 	}
 
-	if algorithm.Equal(OidDataContentType) || algorithm == nil {
+	if algorithm == nil || algorithm.Equal(OidDataContentType) {
 		ci.ContentType = OidDataContentType
 		ci.Content.Class = 2
 		ci.Content.Tag = 0
